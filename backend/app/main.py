@@ -46,12 +46,13 @@ origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "https://lanna-frontend.onrender.com",
-    "https://lannavegwed-frontend.onrender.com", # ใส่เผื่อไว้เลยกันพลาด
+    "https://lannavegwed-frontend.onrender.com",# ใส่เผื่อไว้เลยกันพลาด
+    "https://lannavegwed-frontend-kp5l.onrender.com",
     FRONTEND_URL,
 ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://lannavegwed-frontend.onrender.com"],
+    allow_origins=["https://lannavegwed-frontend-kp5l.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
