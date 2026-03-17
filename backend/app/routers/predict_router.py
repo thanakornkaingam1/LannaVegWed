@@ -144,14 +144,30 @@ async def predict_top3(file: UploadFile = File(...)):
     image = Image.open(io.BytesIO(contents)).convert("RGB")
 
     # เรียก ML model → Top 3
-    top3_results = predict_image_top3(image, top_k=3)
+    top3_result = predict_image_top3(image, top_k=3)
+
+    # =============================================
+    # 🔥 เช็ค Threshold ด้วยค่า confidence จริง (ก่อน temperature)
+    # ถ้า raw confidence ของอันดับ 1 ต่ำกว่า threshold
+    # = ภาพไม่ใช่ผัก → บอกผู้ใช้เลย ไม่แสดง Top 3
+    # =============================================
+    raw_conf = top3_result["raw_top1_confidence"]
+
+    if raw_conf < CONFIDENCE_THRESHOLD:
+        return {
+            "top_candidates": [],
+            "best_match": {
+                "class_name": "Unknown",
+                "confidence": round(raw_conf * 0.96, 4),
+                "message": "ไม่สามารถจำแนกได้ ภาพนี้อาจไม่ใช่ผักพื้นบ้าน กรุณาถ่ายภาพผักแล้วลองใหม่อีกครั้ง"
+            }
+        }
 
     # สร้าง response พร้อมข้อมูลผักแต่ละตัว
     candidates = []
-    for item in top3_results:
+    for item in top3_result["candidates"]:
         class_name = item["class_name"]
-        raw_confidence = float(item["confidence"])
-        confidence = round(raw_confidence * 0.96, 4)  # ลด 4% เหมือน endpoint เดิม
+        confidence = round(float(item["confidence"]) * 0.96, 4)  # ลด 4% เหมือน endpoint เดิม
 
         veg_data = VEGETABLE_INFO.get(class_name, {})
 
@@ -168,19 +184,7 @@ async def predict_top3(file: UploadFile = File(...)):
             "images": veg_data.get("images", []),
         })
 
-    # best_match = อันดับ 1 (ใช้สำหรับ backward compatibility)
     best = candidates[0] if candidates else None
-
-    # ถ้าอันดับ 1 ต่ำกว่า threshold → ส่ง Unknown เหมือนเดิม
-    if best and best["confidence"] < CONFIDENCE_THRESHOLD:
-        return {
-            "top_candidates": candidates,
-            "best_match": {
-                "class_name": "Unknown",
-                "confidence": best["confidence"],
-                "message": "ไม่สามารถจำแนกได้อย่างแน่ชัด กรุณาเลือกจาก Top 3 หรือส่งภาพใหม่"
-            }
-        }
 
     return {
         "top_candidates": candidates,
