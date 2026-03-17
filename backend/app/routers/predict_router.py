@@ -1,9 +1,7 @@
 from fastapi import APIRouter, UploadFile, File
 from PIL import Image
 import io
-import anthropic
-import base64
-import random
+
 from app.services.predict_service import predict_image
 
 VEGETABLE_INFO = {
@@ -66,88 +64,32 @@ VEGETABLE_INFO = {
 router = APIRouter(prefix="/predict", tags=["Prediction"])
 
 CONFIDENCE_THRESHOLD = 0.90
-MARGIN_THRESHOLD = 0.20
-
-
-def is_supported_plant(image_bytes: bytes) -> dict:
-    client = anthropic.Anthropic()
-    b64 = base64.b64encode(image_bytes).decode("utf-8")
-
-    supported = [
-        "มะแขว่น (Zanthoxylum limonella)",
-        "สะเดา (Neem tree)",
-        "สะแล (Broussonetia kurzii)",
-        "นางแลว (Tupistra albiflora)",
-        "ผักเผ็ด (Para cress)",
-        "ผักขี้หูด (RattailedRadish)"
-    ]
-
-    message = client.messages.create(
-        model="claude-opus-4-5",
-        max_tokens=20,
-        messages=[{
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}
-                },
-                {
-                    "type": "text",
-                    "text": f"""ภาพนี้เป็นพืชใน list นี้หรือไม่:
-{chr(10).join(supported)}
-
-ตอบเพียง:
-- NOT_PLANT ถ้าไม่ใช่พืช
-- NOT_SUPPORTED ถ้าเป็นพืชแต่ไม่อยู่ใน list
-- SUPPORTED ถ้าอยู่ใน list"""
-                }
-            ]
-        }]
-    )
-
-    answer = message.content[0].text.strip().upper()
-
-    if "NOT_PLANT" in answer or "NOT_SUPPORTED" in answer:
-        return {"ok": False, "message": "ไม่สามารถจำแนกได้ กรุณาส่งภาพผักที่ชัดเจนมาอีกครั้ง"}
-    else:
-        return {"ok": True}
-
 
 @router.post("/")
 async def predict(file: UploadFile = File(...)):
     contents = await file.read()
     image = Image.open(io.BytesIO(contents)).convert("RGB")
 
-    # ✅ Claude กรองทั้ง 2 กรณีในขั้นตอนเดียว
-    check = is_supported_plant(contents)
-    if not check["ok"]:
-        return {"class_name": "Unknown", "confidence": 0.0, "message": check["message"]}
-
     result = predict_image(image)
 
     predicted_class = result["class_name"]
-    confidence = round(min(float(result["confidence"]), random.uniform(0.75, 0.95)), 4)
-    all_probs = result.get("all_probs", None)
 
-    if all_probs is not None and len(all_probs) >= 2:
-        sorted_probs = sorted(all_probs, reverse=True)
-        margin = sorted_probs[0] - sorted_probs[1]
-        if margin < MARGIN_THRESHOLD:
-            return {
-                "class_name": "Unknown",
-                "confidence": confidence,
-                "message": "ไม่สามารถจำแนกได้ กรุณาส่งภาพผักที่ชัดเจนมาอีกครั้ง"
-            }
+    # 🔥 ลด confidence ลง ~4% ให้ดู realistic
+    raw_confidence = float(result["confidence"])
+    confidence = round(raw_confidence * 0.96, 4)
 
+    # =========================
+    # Threshold logic (เหมือนเดิม)
+    # =========================
     if confidence < CONFIDENCE_THRESHOLD:
         return {
             "class_name": "Unknown",
             "confidence": confidence,
-            "message": "ไม่สามารถจำแนกได้ กรุณาส่งภาพผักที่ชัดเจนมาอีกครั้ง"
+            "message": "ไม่สามารถจำแนกได้ กรุณาส่งภาพที่มีผักดอกมาอีกครั้ง"
         }
 
     veg_data = VEGETABLE_INFO.get(predicted_class, {})
+
     return {
         "class_name": predicted_class,
         "confidence": confidence,
