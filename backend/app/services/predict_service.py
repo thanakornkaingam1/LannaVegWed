@@ -41,12 +41,15 @@ def predict_image_top3(image, top_k=3):
     จำแนกภาพแล้วคืนผล Top 3
 
     Returns:
-        list of dict:
-        [
-            {"class_name": "Para cress", "confidence": 0.9812, "rank": 1},
-            {"class_name": "Neem tree", "confidence": 0.0134, "rank": 2},
-            ...
-        ]
+        dict:
+        {
+            "candidates": [
+                {"class_name": "Para cress", "confidence": 0.68, "rank": 1},
+                {"class_name": "Neem tree", "confidence": 0.18, "rank": 2},
+                ...
+            ],
+            "raw_top1_confidence": 0.9812  # ค่าจริงก่อน temperature (ใช้เช็ค threshold)
+        }
     """
     model = _get_model()
     return predict_top3(model, image, top_k=top_k)
