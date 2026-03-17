@@ -1,9 +1,20 @@
+"""
+app/routers/predict_router.py
+
+✅ ของเดิม: POST /predict/ — จำแนก Top 1 (ไม่แตะ ทำงานปกติ)
+🆕 เพิ่มใหม่: POST /predict/top3 — จำแนก Top 3 พร้อมข้อมูลผักครบ
+
+วิธีใช้: แทนที่ไฟล์ predict_router.py เดิม
+"""
 from fastapi import APIRouter, UploadFile, File
 from PIL import Image
 import io
 
-from app.services.predict_service import predict_image
+from app.services.predict_service import predict_image, predict_image_top3
 
+# =============================================================
+# ข้อมูลผักพื้นบ้าน (เหมือนเดิมทุกประการ)
+# =============================================================
 VEGETABLE_INFO = {
     "Zanthoxylum limonella": {
         "thai_name": "มะแขว่น",
@@ -65,6 +76,10 @@ router = APIRouter(prefix="/predict", tags=["Prediction"])
 
 CONFIDENCE_THRESHOLD = 0.90
 
+
+# =============================================================
+# ✅ Endpoint เดิม — ไม่แก้ไข (ใช้ได้ปกติ)
+# =============================================================
 @router.post("/")
 async def predict(file: UploadFile = File(...)):
     contents = await file.read()
@@ -78,9 +93,7 @@ async def predict(file: UploadFile = File(...)):
     raw_confidence = float(result["confidence"])
     confidence = round(raw_confidence * 0.96, 4)
 
-    # =========================
     # Threshold logic (เหมือนเดิม)
-    # =========================
     if confidence < CONFIDENCE_THRESHOLD:
         return {
             "class_name": "Unknown",
@@ -94,4 +107,82 @@ async def predict(file: UploadFile = File(...)):
         "class_name": predicted_class,
         "confidence": confidence,
         **veg_data
+    }
+
+
+# =============================================================
+# 🆕 Endpoint ใหม่ — POST /predict/top3
+# จำแนกภาพ → คืน Top 3 พร้อมข้อมูลผักครบทุกตัว
+# =============================================================
+@router.post("/top3")
+async def predict_top3(file: UploadFile = File(...)):
+    """
+    จำแนกภาพผัก → คืนผล Top 3 เรียงตามค่าความมั่นใจ
+
+    Response:
+    {
+        "top_candidates": [
+            {
+                "rank": 1,
+                "class_name": "Para cress",
+                "confidence": 0.9432,
+                "thai_name": "ผักเผ็ด",
+                "local_name": "ผักแพว",
+                "scientific_name": "...",
+                "properties": "...",
+                "recommended_menu": "...",
+                "botanical_description": "...",
+                "images": [...]
+            },
+            { "rank": 2, ... },
+            { "rank": 3, ... }
+        ],
+        "best_match": { ... }  // อันดับ 1 (สำหรับ backward compat)
+    }
+    """
+    contents = await file.read()
+    image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+    # เรียก ML model → Top 3
+    top3_results = predict_image_top3(image, top_k=3)
+
+    # สร้าง response พร้อมข้อมูลผักแต่ละตัว
+    candidates = []
+    for item in top3_results:
+        class_name = item["class_name"]
+        raw_confidence = float(item["confidence"])
+        confidence = round(raw_confidence * 0.96, 4)  # ลด 4% เหมือน endpoint เดิม
+
+        veg_data = VEGETABLE_INFO.get(class_name, {})
+
+        candidates.append({
+            "rank": item["rank"],
+            "class_name": class_name,
+            "confidence": confidence,
+            "thai_name": veg_data.get("thai_name", class_name),
+            "local_name": veg_data.get("local_name", "-"),
+            "scientific_name": veg_data.get("scientific_name", "-"),
+            "properties": veg_data.get("properties", "-"),
+            "recommended_menu": veg_data.get("recommended_menu", "-"),
+            "botanical_description": veg_data.get("botanical_description", "-"),
+            "images": veg_data.get("images", []),
+        })
+
+    # best_match = อันดับ 1 (ใช้สำหรับ backward compatibility)
+    best = candidates[0] if candidates else None
+
+    # ถ้าอันดับ 1 ต่ำกว่า threshold → ส่ง Unknown เหมือนเดิม
+    if best and best["confidence"] < CONFIDENCE_THRESHOLD:
+        return {
+            "top_candidates": candidates,
+            "best_match": {
+                "class_name": "Unknown",
+                "confidence": best["confidence"],
+                "message": "ไม่สามารถจำแนกได้อย่างแน่ชัด กรุณาเลือกจาก Top 3 หรือส่งภาพใหม่"
+            }
+        }
+
+    return {
+        "top_candidates": candidates,
+        "best_match": best,
     }
