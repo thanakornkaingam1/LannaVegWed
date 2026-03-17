@@ -123,8 +123,10 @@ export default function Classify() {
 
       const data: Top3Response = await res.json();
 
+      // 🔥 ถ้า top_candidates ว่าง = ภาพไม่ใช่ผัก
       if (!data.top_candidates || data.top_candidates.length === 0) {
-        setError("ไม่สามารถจำแนกได้ กรุณาส่งภาพที่มีผักมาอีกครั้ง");
+        const msg = data.best_match?.message || "ไม่สามารถจำแนกได้ ภาพนี้อาจไม่ใช่ผักพื้นบ้าน กรุณาถ่ายภาพผักแล้วลองใหม่อีกครั้ง";
+        setError(msg);
         return;
       }
 
@@ -258,10 +260,22 @@ export default function Classify() {
           </button>
         </div>
 
-        {/* ========== Error ========== */}
+        {/* ========== Error / ไม่ใช่ผัก ========== */}
         {error && (
-          <div className="mt-6 p-4 bg-red-500/20 border border-red-500/50 rounded-xl text-red-300 text-center font-medium animate-pulse">
-            ❌ {error}
+          <div className="mt-10 rounded-3xl overflow-hidden bg-white/10 border border-red-500/30 shadow-inner">
+            <div className="bg-red-500/20 p-8 md:p-10 text-center space-y-4">
+              <div className="text-6xl">🚫</div>
+              <h2 className="text-2xl font-bold text-red-300">ไม่พบผักพื้นบ้านในภาพ</h2>
+              <p className="text-white/70 max-w-md mx-auto">
+                {error}
+              </p>
+              <button
+                onClick={() => { setError(""); setFile(null); setPreview(null); }}
+                className="mt-4 bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl font-bold transition"
+              >
+                🔄 ลองใหม่อีกครั้ง
+              </button>
+            </div>
           </div>
         )}
 
