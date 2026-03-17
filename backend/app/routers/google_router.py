@@ -16,7 +16,7 @@ oauth.register(
     client_kwargs={"scope": "openid email profile"},
 )
 
-FRONTEND_URL = "https://lannavegwed-frontend.onrender.com"
+FRONTEND_URL = "https://lannavegwed-frontend-kp5l.onrender.com"
 
 
 @router.get("/login/google")
