@@ -102,23 +102,30 @@ export default function Classify() {
       setShowReview(false);
 
       // ลอง /api/v1/predict/top3 ก่อน ถ้า 404 ก็ fallback
-      let res = await fetch(`${API_BASE}/api/v1/predict/top3`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      if (!res.ok && res.status === 404) {
-        res = await fetch(`${API_BASE}/predict/top3`, {
+      let res: Response;
+      try {
+        res = await fetch(`${API_BASE}/api/v1/predict/top3`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
           body: formData,
         });
+
+        if (!res.ok && res.status === 404) {
+          res = await fetch(`${API_BASE}/predict/top3`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          });
+        }
+      } catch (fetchErr) {
+        // Network error / CORS / server ไม่ตอบ
+        throw new Error("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตหรือรอสักครู่แล้วลองใหม่");
       }
 
       if (!res.ok) {
         if (res.status === 401) throw new Error("กรุณาเข้าสู่ระบบก่อนใช้งาน");
-        throw new Error("เกิดข้อผิดพลาดในการวิเคราะห์ภาพ");
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "เกิดข้อผิดพลาดในการวิเคราะห์ภาพ");
       }
 
       const data: Top3Response = await res.json();
